@@ -1,5 +1,9 @@
 # Cashier Paytiko
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/asciisd/cashier-paytiko.svg?style=flat-square)](https://packagist.org/packages/asciisd/cashier-paytiko)
+[![Total Downloads](https://img.shields.io/packagist/dt/asciisd/cashier-paytiko.svg?style=flat-square)](https://packagist.org/packages/asciisd/cashier-paytiko)
+[![License](https://img.shields.io/packagist/l/asciisd/cashier-paytiko.svg?style=flat-square)](https://packagist.org/packages/asciisd/cashier-paytiko)
+
 A Laravel package that integrates Paytiko payment processor with [Cashier Core](https://github.com/asciisd/cashier-core). This package provides a clean, scalable implementation of Paytiko's Hosted Page solution with comprehensive webhook handling.
 
 ## Features
