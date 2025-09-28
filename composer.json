@@ -1,0 +1,61 @@
+{
+    "name": "asciisd/cashier-paytiko",
+    "version": "1.0.0",
+    "description": "Paytiko payment processor for Laravel Cashier Core",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "payment",
+        "paytiko",
+        "cashier",
+        "gateway"
+    ],
+    "authors": [
+        {
+            "name": "ASCII SD",
+            "email": "info@asciisd.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "laravel/framework": "^11.0|^12.0",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "require-dev": {
+        "asciisd/cashier-core": "^1.0",
+        "orchestra/testbench": "^9.0",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Asciisd\\CashierPaytiko\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Asciisd\\CashierPaytiko\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Asciisd\\CashierPaytiko\\CashierPaytikoServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage"
+    }
+}
