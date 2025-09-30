@@ -44,6 +44,21 @@ class PaytikoProcessor extends AbstractPaymentProcessor
         return 'paytiko';
     }
 
+    /**
+     * Simplified charge method - accepts amount and optional parameters
+     */
+    public function simpleCharge(int|float $amount, array $params = []): PaymentResult
+    {
+        // Build payment data from config and parameters
+        $paymentData = $this->buildPaymentData($amount, $params);
+        
+        // Call the full charge method with complete data
+        return $this->charge($paymentData);
+    }
+
+    /**
+     * Standard charge method (inherited from AbstractPaymentProcessor)
+     */
     public function charge(array $data): PaymentResult
     {
         $validatedData = $this->validatePaymentData($data);
@@ -139,10 +154,92 @@ class PaytikoProcessor extends AbstractPaymentProcessor
     }
 
     /**
+     * Build complete payment data from amount and parameters
+     */
+    private function buildPaymentData(int|float $amount, array $params): array
+    {
+        // Start with defaults from config
+        $paymentData = [
+            'amount' => $amount,
+            'currency' => $params['currency'] ?? $this->getConfig('default_currency', 'USD'),
+            'order_id' => $params['order_id'] ?? $this->generateOrderId(),
+            'description' => $params['description'] ?? $this->generateDefaultDescription($amount),
+            
+            // URLs from config (with fallbacks to routes if not set)
+            'webhook_url' => $this->getConfig('webhook_url') ?? $this->getDefaultWebhookUrl(),
+            'success_redirect_url' => $this->getConfig('success_redirect_url') ?? $this->getDefaultSuccessUrl(),
+            'failed_redirect_url' => $this->getConfig('failed_redirect_url') ?? $this->getDefaultFailedUrl(),
+        ];
+
+        // Add billing details if provided
+        if (isset($params['billing_details'])) {
+            $paymentData['billing_details'] = $params['billing_details'];
+        }
+
+        // Add any additional parameters
+        $additionalParams = [
+            'disabled_psp_ids', 'credit_card_only', 'is_pay_out', 'metadata'
+        ];
+
+        foreach ($additionalParams as $param) {
+            if (isset($params[$param])) {
+                $paymentData[$param] = $params[$param];
+            }
+        }
+
+        return $paymentData;
+    }
+
+    /**
+     * Generate default description for payment
+     */
+    private function generateDefaultDescription(int|float $amount): string
+    {
+        $currency = $this->getConfig('default_currency', 'USD');
+        return "Payment of {$currency} {$amount} via Paytiko";
+    }
+
+    /**
+     * Get default webhook URL (fallback to route if config not set)
+     */
+    private function getDefaultWebhookUrl(): string
+    {
+        try {
+            return route('paytiko.webhook');
+        } catch (\Exception) {
+            return url('/api/webhooks/paytiko');
+        }
+    }
+
+    /**
+     * Get default success URL (fallback to route if config not set)
+     */
+    private function getDefaultSuccessUrl(): string
+    {
+        try {
+            return route('payment.success');
+        } catch (\Exception) {
+            return url('/payment/success');
+        }
+    }
+
+    /**
+     * Get default failed URL (fallback to route if config not set)
+     */
+    private function getDefaultFailedUrl(): string
+    {
+        try {
+            return route('payment.failed');
+        } catch (\Exception) {
+            return url('/payment/failed');
+        }
+    }
+
+    /**
      * Generate order ID if not provided
      */
     private function generateOrderId(): string
     {
-        return 'paytiko_' . Str::uuid();
+        return 'paytiko_' . time() . '_' . bin2hex(random_bytes(4));
     }
 }

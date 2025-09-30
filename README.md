@@ -8,7 +8,9 @@ A Laravel package that integrates Paytiko payment processor with [Cashier Core](
 
 ## Features
 
+- **Simplified Payment API**: Easy-to-use `simpleCharge(amount, params)` method with automatic configuration
 - **Hosted Page Integration**: Seamless integration with Paytiko's hosted payment pages
+- **Automatic Configuration**: URLs, order IDs, and descriptions auto-generated from config
 - **Webhook Handling**: Automatic webhook processing with signature verification
 - **Event System**: Laravel events for payment status updates
 - **DTO Architecture**: Clean data transfer objects for type safety
@@ -53,7 +55,79 @@ PAYTIKO_LOGGING_ENABLED=true
 
 ## Usage
 
-### Basic Payment Processing
+### Simplified Payment Processing (Recommended)
+
+The new `simpleCharge` method provides a streamlined way to process payments with minimal configuration:
+
+```php
+use Asciisd\CashierCore\Facades\PaymentFactory;
+
+// Create Paytiko processor
+$processor = PaymentFactory::create('paytiko', [
+    'merchant_secret_key' => config('cashier-paytiko.merchant_secret_key'),
+    'core_url' => config('cashier-paytiko.core_url'),
+]);
+
+// 1. Minimal payment - only amount and billing details required
+$result = $processor->simpleCharge(100.00, [
+    'billing_details' => [
+        'first_name' => 'John',
+        'last_name' => 'Doe',
+        'email' => 'john@example.com',
+        'country' => 'US',
+        'phone' => '+1234567890',
+    ]
+]);
+
+// 2. With custom parameters
+$result = $processor->simpleCharge(250.50, [
+    'currency' => 'EUR',
+    'description' => 'Custom deposit for trading account',
+    'billing_details' => [
+        'first_name' => 'Jane',
+        'last_name' => 'Smith',
+        'email' => 'jane@example.com',
+        'country' => 'CA',
+        'phone' => '+1555123456',
+    ],
+    'metadata' => ['campaign_id' => 'xyz123'],
+]);
+
+// 3. Override default URLs
+$result = $processor->simpleCharge(75.00, [
+    'billing_details' => [
+        'first_name' => 'Alice',
+        'last_name' => 'Brown',
+        'email' => 'alice@example.com',
+        'country' => 'GB',
+        'phone' => '+447123456789',
+    ],
+    'webhook_url' => 'https://my-app.com/custom-webhook',
+    'success_redirect_url' => 'https://my-app.com/custom-success',
+]);
+
+if ($result->isSuccessful()) {
+    $redirectUrl = $result->metadata['redirect_url'];
+    // Redirect user to Paytiko hosted page
+    return redirect($redirectUrl);
+} else {
+    // Handle error
+    echo "Payment failed: {$result->message}";
+}
+```
+
+#### What `simpleCharge` Auto-Generates
+
+When using `simpleCharge`, the following are automatically handled:
+
+- **Order ID**: Generated using `deposit-{timestamp}-{random}`
+- **Description**: Auto-generated based on amount (e.g., "Deposit $100.00")
+- **Webhook URL**: Uses config value or falls back to Laravel route
+- **Success/Failed URLs**: Uses config values or falls back to Laravel routes
+- **Currency**: Uses config default (USD) if not specified
+- **Timestamp**: Automatically generated for signature creation
+
+### Basic Payment Processing (Legacy)
 
 ```php
 use Asciisd\CashierCore\Facades\PaymentFactory;
@@ -260,11 +334,35 @@ Run tests with coverage:
 composer test-coverage
 ```
 
-### Example Test
+### Example Tests
+
+#### Testing the Simplified Method
 
 ```php
 use Asciisd\CashierPaytiko\PaytikoProcessor;
 
+it('processes payment with simpleCharge successfully', function () {
+    $processor = new PaytikoProcessor([
+        'merchant_secret_key' => 'test_secret',
+        'core_url' => 'https://test.paytiko.com',
+    ]);
+    
+    $result = $processor->simpleCharge(100.00, [
+        'billing_details' => [
+            'first_name' => 'John',
+            'email' => 'john@example.com',
+            'country' => 'US',
+            'phone' => '+1234567890',
+        ],
+    ]);
+    
+    expect($result->isSuccessful())->toBeTrue();
+});
+```
+
+#### Testing the Legacy Method
+
+```php
 it('processes payment successfully', function () {
     $processor = new PaytikoProcessor([
         'merchant_secret_key' => 'test_secret',
@@ -333,6 +431,17 @@ The MIT License (MIT). Please see [License File](LICENSE.md) for more informatio
 For support, please open an issue on GitHub or contact us at <info@asciisd.com>.
 
 ## Changelog
+
+### v1.2.0 (dev-main)
+
+- **NEW**: Added `simpleCharge(amount, params)` method for simplified payment processing
+- **NEW**: Automatic order ID generation with `deposit-{timestamp}-{random}` format
+- **NEW**: Auto-generated descriptions based on payment amount
+- **NEW**: Automatic URL handling with config fallbacks and Laravel route support
+- **NEW**: Comprehensive test suite for simplified payment method
+- **NEW**: Example usage documentation and code samples
+- **IMPROVED**: Better separation between simplified and legacy payment methods
+- **IMPROVED**: Enhanced error handling and validation for simplified API
 
 ### v1.0.0
 
