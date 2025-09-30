@@ -57,7 +57,7 @@ class PaytikoProcessor extends AbstractPaymentProcessor
                 return new PaymentResult(
                     success: true, // This indicates the hosted page creation was successful
                     transactionId: $validatedData['order_id'],
-                    amount: (int) ($validatedData['amount'] * 100), // Convert dollars to cents for internal storage
+                    amount: (int) $validatedData['amount'], // Use amount as-is (no cents conversion)
                     currency: $validatedData['currency'] ?? config('cashier-paytiko.default_currency', 'USD'),
                     status: PaymentStatus::Pending, // Payment is pending until webhook confirms
                     message: 'Hosted page created successfully',
