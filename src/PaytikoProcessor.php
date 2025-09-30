@@ -240,6 +240,6 @@ class PaytikoProcessor extends AbstractPaymentProcessor
      */
     private function generateOrderId(): string
     {
-        return 'paytiko_' . time() . '_' . bin2hex(random_bytes(4));
+        return 'deposit-' . time() . '-' . bin2hex(random_bytes(4));
     }
 }
