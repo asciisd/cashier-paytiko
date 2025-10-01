@@ -98,10 +98,10 @@ class PaytikoWebhookController extends Controller
             currency: $payload['AccountDetails']['Currency'],
             country: $payload['AccountDetails']['Country'],
             dob: $payload['AccountDetails']['Dob'],
-            city: $payload['AccountDetails']['City'],
-            zipCode: $payload['AccountDetails']['ZipCode'],
-            region: $payload['AccountDetails']['Region'],
-            street: $payload['AccountDetails']['Street'],
+            city: $payload['AccountDetails']['City'] ?? null,
+            zipCode: $payload['AccountDetails']['ZipCode'] ?? null,
+            region: $payload['AccountDetails']['Region'] ?? null,
+            street: $payload['AccountDetails']['Street'] ?? null,
             phone: $payload['AccountDetails']['Phone'] ?? null,
         );
 

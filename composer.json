@@ -1,6 +1,6 @@
 {
     "name": "asciisd/cashier-paytiko",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Paytiko payment processor for Laravel Cashier Core",
     "type": "library",
     "license": "MIT",

@@ -550,11 +550,11 @@ class PaytikoWebhookResyncService
                 currency: $webhookPayload['AccountDetails']['Currency'],
                 country: $webhookPayload['AccountDetails']['Country'],
                 dob: $webhookPayload['AccountDetails']['Dob'],
-                city: $webhookPayload['AccountDetails']['City'],
-                zipCode: $webhookPayload['AccountDetails']['ZipCode'],
-                region: $webhookPayload['AccountDetails']['Region'],
-                street: $webhookPayload['AccountDetails']['Street'],
-                phone: $webhookPayload['AccountDetails']['Phone'],
+                city: $webhookPayload['AccountDetails']['City'] ?? null,
+                zipCode: $webhookPayload['AccountDetails']['ZipCode'] ?? null,
+                region: $webhookPayload['AccountDetails']['Region'] ?? null,
+                street: $webhookPayload['AccountDetails']['Street'] ?? null,
+                phone: $webhookPayload['AccountDetails']['Phone'] ?? null,
             );
 
             $webhookData = new PaytikoWebhookData(
