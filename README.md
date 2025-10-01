@@ -140,7 +140,7 @@ $processor = PaymentFactory::create('paytiko', [
 
 // Process payment (creates hosted page)
 $result = $processor->charge([
-    'amount' => 2000, // $20.00 in cents
+    'amount' => 20, // $20.00
     'currency' => 'USD',
     'order_id' => 'order_12345',
     'description' => 'Product purchase',
