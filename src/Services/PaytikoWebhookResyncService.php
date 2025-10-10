@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Asciisd\CashierPaytiko\Services;
 
 use Asciisd\CashierCore\DataObjects\PaymentMethodSnapshot;
+use Asciisd\CashierCore\DataObjects\TransactionWebhookUpdate;
 use Asciisd\CashierCore\Enums\PaymentStatus;
 use Asciisd\CashierCore\Models\Transaction;
 use Asciisd\CashierPaytiko\DataObjects\PaytikoWebhookData;
 use Asciisd\CashierPaytiko\Events\PaytikoWebhookReceived;
+use Asciisd\CashierCore\Services\TransactionService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Support\Facades\Log;
@@ -18,6 +20,7 @@ class PaytikoWebhookResyncService
     public function __construct(
         private readonly Client $httpClient,
         private readonly PaytikoSignatureService $signatureService,
+        private readonly TransactionService $transactionService,
         private readonly string $coreUrl,
         private readonly string $merchantSecretKey,
     ) {}
@@ -385,18 +388,21 @@ class PaytikoWebhookResyncService
     private function updateTransactionFromPayload(string $orderId, array $payload): void
     {
         try {
-            // Find the transaction
-            $transaction = Transaction::where('processor_name', 'paytiko')
-                ->where(function ($query) use ($orderId) {
-                    $query->where('processor_transaction_id', $orderId)
-                          ->orWhereJsonContains('metadata->order_id', $orderId);
-                })
-                ->first();
+            // Find the transaction using the service
+            $transaction = $this->transactionService->findByProcessorTransactionId($orderId, 'paytiko');
 
-            if (!$transaction) {
+            if (! $transaction) {
+                // Try finding by metadata
+                $transaction = Transaction::where('processor_name', 'paytiko')
+                    ->whereJsonContains('metadata->order_id', $orderId)
+                    ->first();
+            }
+
+            if (! $transaction) {
                 Log::warning('Transaction not found for payload update', [
                     'order_id' => $orderId,
                 ]);
+
                 return;
             }
 
@@ -404,51 +410,36 @@ class PaytikoWebhookResyncService
             $paytikoStatus = $payload['TransactionStatus'] ?? null;
             $internalStatus = $this->mapPaytikoStatusToInternal($paytikoStatus);
 
-            // Prepare update data
-            $updateData = [
-                'status' => $internalStatus,
-            ];
-
-            // Update timestamps based on status
-            if ($internalStatus === PaymentStatus::Succeeded) {
-                $updateData['processed_at'] = now();
-                $updateData['failed_at'] = null;
-            } elseif ($internalStatus === PaymentStatus::Failed) {
-                $updateData['failed_at'] = now();
-                $updateData['error_code'] = $payload['DeclineReasonCode'] ?? null;
-                $updateData['error_message'] = $payload['DeclineReasonText'] ?? null;
-            }
-
-            // Extract and update payment method snapshot data
+            // Extract payment method snapshot data
             $paymentMethodSnapshot = $this->extractPaymentMethodFromPaytikoPayload($payload);
-            if ($paymentMethodSnapshot) {
-                $updateData = array_merge($updateData, $paymentMethodSnapshot->toArray());
-            }
 
-            // Update metadata with additional payload information
-            $existingMetadata = $transaction->metadata ?? [];
-            $updatedMetadata = array_merge($existingMetadata, [
-                'paytiko_transaction_id' => $payload['TransactionId'] ?? null,
-                'external_transaction_id' => $payload['ExternalTransactionId'] ?? null,
-                'payment_processor' => $payload['PaymentProcessor'] ?? null,
-                'card_type' => $payload['CardType'] ?? null,
-                'last_cc_digits' => $payload['LastCcDigits'] ?? null,
-                'masked_pan' => $payload['MaskedPan'] ?? null,
-                'currency' => $payload['Currency'] ?? null,
-                'amount' => $payload['Amount'] ?? null,
-                'resync_updated_at' => now()->toISOString(),
-            ]);
+            // Create webhook update DTO
+            $webhookUpdate = new TransactionWebhookUpdate(
+                status: $internalStatus,
+                processorResponse: $payload,
+                paymentMethodSnapshot: $paymentMethodSnapshot,
+                metadata: [
+                    'paytiko_transaction_id' => $payload['TransactionId'] ?? null,
+                    'external_transaction_id' => $payload['ExternalTransactionId'] ?? null,
+                    'payment_processor' => $payload['PaymentProcessor'] ?? null,
+                    'card_type' => $payload['CardType'] ?? null,
+                    'last_cc_digits' => $payload['LastCcDigits'] ?? null,
+                    'masked_pan' => $payload['MaskedPan'] ?? null,
+                    'currency' => $payload['Currency'] ?? null,
+                    'amount' => $payload['Amount'] ?? null,
+                    'resync_updated_at' => now()->toISOString(),
+                ],
+                errorCode: $internalStatus === PaymentStatus::Failed ? ($payload['DeclineReasonCode'] ?? null) : null,
+                errorMessage: $internalStatus === PaymentStatus::Failed ? ($payload['DeclineReasonText'] ?? null) : null,
+            );
 
-            $updateData['metadata'] = $updatedMetadata;
-
-            // Update the transaction
-            $transaction->update($updateData);
+            // Update transaction using standardized service
+            $this->transactionService->updateFromWebhook($transaction, $webhookUpdate);
 
             if (config('cashier-paytiko.logging.enabled', true)) {
-                Log::info('Transaction updated from resync payload', [
+                Log::info('Transaction updated from resync payload using DTO', [
                     'order_id' => $orderId,
                     'transaction_id' => $transaction->id,
-                    'old_status' => $transaction->getOriginal('status'),
                     'new_status' => $internalStatus->value,
                     'paytiko_status' => $paytikoStatus,
                 ]);
@@ -731,50 +722,66 @@ class PaytikoWebhookResyncService
     private function updateTransactionPaymentMethodFromWebhook(string $orderId, array $webhookPayload): void
     {
         try {
-            // Find the transaction
-            $transaction = Transaction::where('processor_name', 'paytiko')
-                ->where(function ($query) use ($orderId) {
-                    $query->where('processor_transaction_id', $orderId)
-                          ->orWhereJsonContains('metadata->order_id', $orderId);
-                })
-                ->first();
+            // Find the transaction using the service
+            $transaction = $this->transactionService->findByProcessorTransactionId($orderId, 'paytiko');
 
-            if (!$transaction) {
+            if (! $transaction) {
+                // Try finding by metadata
+                $transaction = Transaction::where('processor_name', 'paytiko')
+                    ->whereJsonContains('metadata->order_id', $orderId)
+                    ->first();
+            }
+
+            if (! $transaction) {
                 Log::warning('Transaction not found for payment method update', [
                     'order_id' => $orderId,
                 ]);
+
                 return;
             }
 
             // Extract payment method snapshot from webhook payload
             $paymentMethodSnapshot = $this->extractPaymentMethodFromPaytikoPayload($webhookPayload);
-            
-            if ($paymentMethodSnapshot) {
-                // Only update if we don't already have payment method data or if it's incomplete
-                $shouldUpdate = empty($transaction->payment_method_type) || 
-                               empty($transaction->payment_method_brand) ||
-                               ($paymentMethodSnapshot->lastFour && empty($transaction->payment_method_last_four));
 
-                if ($shouldUpdate) {
-                    $transaction->update($paymentMethodSnapshot->toArray());
+            if (! $paymentMethodSnapshot) {
+                return;
+            }
 
-                    if (config('cashier-paytiko.logging.enabled', true)) {
-                        Log::info('Transaction payment method updated from webhook', [
-                            'order_id' => $orderId,
-                            'transaction_id' => $transaction->id,
-                            'payment_method_type' => $paymentMethodSnapshot->type->value,
-                            'payment_method_brand' => $paymentMethodSnapshot->brand->value,
-                            'payment_method_last_four' => $paymentMethodSnapshot->lastFour,
-                        ]);
-                    }
-                }
+            // Get current transaction status from the payload
+            $paytikoStatus = $webhookPayload['TransactionStatus'] ?? null;
+            $internalStatus = $this->mapPaytikoStatusToInternal($paytikoStatus);
+
+            // Create webhook update DTO with payment method snapshot
+            $webhookUpdate = new TransactionWebhookUpdate(
+                status: $internalStatus,
+                processorResponse: $webhookPayload,
+                paymentMethodSnapshot: $paymentMethodSnapshot,
+                metadata: [
+                    'paytiko_transaction_id' => $webhookPayload['TransactionId'] ?? null,
+                    'external_transaction_id' => $webhookPayload['ExternalTransactionId'] ?? null,
+                    'payment_processor' => $webhookPayload['PaymentProcessor'] ?? null,
+                    'card_type' => $webhookPayload['CardType'] ?? null,
+                    'last_cc_digits' => $webhookPayload['LastCcDigits'] ?? null,
+                    'masked_pan' => $webhookPayload['MaskedPan'] ?? null,
+                ],
+            );
+
+            // Update transaction using standardized service
+            $this->transactionService->updateFromWebhook($transaction, $webhookUpdate);
+
+            if (config('cashier-paytiko.logging.enabled', true)) {
+                Log::info('Transaction payment method updated from resynced webhook using DTO', [
+                    'order_id' => $orderId,
+                    'transaction_id' => $transaction->id,
+                    'payment_method_type' => $paymentMethodSnapshot->type->value,
+                    'payment_method_brand' => $paymentMethodSnapshot->brand->value,
+                ]);
             }
 
         } catch (\Exception $e) {
             Log::error('Failed to update transaction payment method from webhook', [
                 'order_id' => $orderId,
                 'error' => $e->getMessage(),
-                'webhook_payload' => $webhookPayload,
             ]);
         }
     }
