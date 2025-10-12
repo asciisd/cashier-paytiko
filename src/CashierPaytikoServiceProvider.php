@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Asciisd\CashierPaytiko;
 
+use Asciisd\CashierCore\Services\TransactionService;
 use Asciisd\CashierPaytiko\Http\Controllers\PaytikoWebhookController;
 use Asciisd\CashierPaytiko\Services\PaytikoHostedPageService;
 use Asciisd\CashierPaytiko\Services\PaytikoSignatureService;
@@ -17,7 +18,7 @@ class CashierPaytikoServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__ . '/../config/cashier-paytiko.php',
+            __DIR__.'/../config/cashier-paytiko.php',
             'cashier-paytiko'
         );
 
@@ -40,6 +41,7 @@ class CashierPaytikoServiceProvider extends ServiceProvider
             return new PaytikoWebhookResyncService(
                 $app->make(Client::class),
                 $app->make(PaytikoSignatureService::class),
+                $app->make(TransactionService::class),
                 config('cashier-paytiko.core_url'),
                 config('cashier-paytiko.merchant_secret_key')
             );
@@ -49,7 +51,7 @@ class CashierPaytikoServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->publishes([
-            __DIR__ . '/../config/cashier-paytiko.php' => config_path('cashier-paytiko.php'),
+            __DIR__.'/../config/cashier-paytiko.php' => config_path('cashier-paytiko.php'),
         ], 'cashier-paytiko-config');
 
         $this->registerRoutes();
@@ -63,17 +65,17 @@ class CashierPaytikoServiceProvider extends ServiceProvider
         ], function () {
             Route::post('paytiko', [PaytikoWebhookController::class, 'handle'])
                 ->name('paytiko.webhook');
-            
+
             // Webhook resync endpoints
             Route::post('paytiko/resync', [PaytikoWebhookController::class, 'resyncWebhooks'])
                 ->name('paytiko.webhook.resync');
-            
+
             Route::post('paytiko/resync-by-date', [PaytikoWebhookController::class, 'resyncWebhooksByDateRange'])
                 ->name('paytiko.webhook.resync-by-date');
-            
+
             Route::get('paytiko/resync-status/{resyncId}', [PaytikoWebhookController::class, 'getResyncStatus'])
                 ->name('paytiko.webhook.resync-status');
-            
+
             Route::post('paytiko/process-resynced', [PaytikoWebhookController::class, 'processResyncedWebhook'])
                 ->name('paytiko.webhook.process-resynced');
         });
