@@ -18,6 +18,7 @@ readonly class PaytikoHostedPageRequest
         public ?bool $creditCardOnly = null,
         public ?string $cashierDescription = null,
         public ?bool $isPayOut = null,
+        public ?int $fixedPpId = null,
     ) {}
 
     public function toArray(): array

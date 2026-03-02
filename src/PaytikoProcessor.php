@@ -7,21 +7,26 @@ namespace Asciisd\CashierPaytiko;
 use Asciisd\CashierCore\Abstracts\AbstractPaymentProcessor;
 use Asciisd\CashierCore\DataObjects\PaymentResult;
 use Asciisd\CashierCore\DataObjects\RefundResult;
+use Asciisd\CashierCore\DataObjects\TransactionWebhookUpdate;
 use Asciisd\CashierCore\Enums\PaymentStatus;
 use Asciisd\CashierCore\Enums\RefundStatus;
 use Asciisd\CashierCore\Exceptions\InvalidPaymentDataException;
 use Asciisd\CashierCore\Exceptions\PaymentProcessingException;
+use Asciisd\CashierPaytiko\Adapters\PaytikoAdapter;
 use Asciisd\CashierPaytiko\Services\PaytikoHostedPageService;
 use Asciisd\CashierPaytiko\Services\PaytikoSignatureService;
+use Asciisd\CashierPaytiko\Services\PaytikoWebhookResyncService;
 use GuzzleHttp\Client;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PaytikoProcessor extends AbstractPaymentProcessor
 {
-    protected array $supportedFeatures = ['charge', 'hosted_page'];
+    protected array $supportedFeatures = ['charge', 'hosted_page', 'webhook'];
 
     private PaytikoHostedPageService $hostedPageService;
     private PaytikoSignatureService $signatureService;
+    private PaytikoAdapter $adapter;
 
     public function __construct(array $config = [])
     {
@@ -37,6 +42,8 @@ class PaytikoProcessor extends AbstractPaymentProcessor
             $this->getConfig('core_url'),
             $this->getConfig('merchant_secret_key')
         );
+
+        $this->adapter = new PaytikoAdapter();
     }
 
     public function getName(): string
@@ -109,10 +116,62 @@ class PaytikoProcessor extends AbstractPaymentProcessor
         throw new \BadMethodCallException('Direct refunds not supported. Refunds are processed via Paytiko admin panel.');
     }
 
+    public function retrieve(string $transactionId): ?PaymentResult
+    {
+        try {
+            $resyncService = app(PaytikoWebhookResyncService::class);
+            $result = $resyncService->extractWebhookPayload($transactionId);
+
+            if (! $result['success'] || ! isset($result['payload'])) {
+                Log::warning('Failed to retrieve Paytiko transaction', [
+                    'transaction_id' => $transactionId,
+                    'error' => $result['message'] ?? 'Unknown error',
+                ]);
+
+                return null;
+            }
+
+            return $this->adapter->fromProviderPayload($transactionId, $result['payload']);
+        } catch (\Exception $e) {
+            Log::error('Paytiko retrieve failed', [
+                'error' => $e->getMessage(),
+                'transaction_id' => $transactionId,
+            ]);
+
+            return null;
+        }
+    }
+
     public function getPaymentStatus(string $transactionId): string
     {
         // Status updates are received via webhooks
         throw new \BadMethodCallException('Payment status retrieval not supported. Status updates are received via webhooks.');
+    }
+
+    public function parseWebhook(array $payload): TransactionWebhookUpdate
+    {
+        return $this->adapter->fromWebhook($payload);
+    }
+
+    public function verifyWebhookSignature(array $payload, string $signature): bool
+    {
+        $orderId = $payload['OrderId'] ?? '';
+
+        if (empty($orderId)) {
+            return false;
+        }
+
+        $calculatedSignature = $this->signatureService->generateWebhookSignature($orderId);
+
+        return hash_equals($calculatedSignature, $signature);
+    }
+
+    /**
+     * Get the adapter instance.
+     */
+    public function getAdapter(): PaytikoAdapter
+    {
+        return $this->adapter;
     }
 
     protected function getValidationRules(): array
@@ -142,6 +201,7 @@ class PaytikoProcessor extends AbstractPaymentProcessor
             'disabled_psp_ids' => 'sometimes|array',
             'credit_card_only' => 'sometimes|boolean',
             'is_pay_out' => 'sometimes|boolean',
+            'fixed_pp_id' => 'sometimes|integer',
         ];
     }
 
@@ -178,7 +238,7 @@ class PaytikoProcessor extends AbstractPaymentProcessor
 
         // Add any additional parameters
         $additionalParams = [
-            'disabled_psp_ids', 'credit_card_only', 'is_pay_out', 'metadata'
+            'disabled_psp_ids', 'credit_card_only', 'is_pay_out', 'metadata', 'fixed_pp_id',
         ];
 
         foreach ($additionalParams as $param) {

@@ -57,9 +57,16 @@ class PaytikoHostedPageService
                 ]);
             }
 
+            $redirectUrl = $data['redirectUrl'] ?? null;
+
+            if ($redirectUrl && $request->fixedPpId !== null) {
+                $redirectUrl .= (str_contains($redirectUrl, '?') ? '&' : '?')
+                    . 'm_fixed_pp_id=' . $request->fixedPpId;
+            }
+
             return new PaytikoHostedPageResponse(
                 success: true,
-                redirectUrl: $data['redirectUrl'] ?? null,
+                redirectUrl: $redirectUrl,
             );
 
         } catch (GuzzleException $e) {
@@ -123,6 +130,7 @@ class PaytikoHostedPageService
             creditCardOnly: $data['credit_card_only'] ?? null,
             cashierDescription: $data['description'] ?? null,
             isPayOut: $data['is_pay_out'] ?? null,
+            fixedPpId: isset($data['fixed_pp_id']) ? (int) $data['fixed_pp_id'] : null,
         );
     }
 }
