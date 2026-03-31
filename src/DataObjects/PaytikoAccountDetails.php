@@ -14,7 +14,7 @@ readonly class PaytikoAccountDetails
         public string $email,
         public string $currency,
         public string $country,
-        public string $dob,
+        public ?string $dob,
         public ?string $city,
         public ?string $zipCode,
         public ?string $region,

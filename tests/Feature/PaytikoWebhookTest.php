@@ -52,6 +52,54 @@ it('handles valid webhook successfully', function () {
     Event::assertDispatched(PaytikoPaymentSuccessful::class);
 });
 
+it('handles webhook with null dob in account details', function () {
+    Event::fake();
+
+    $orderId = 'b2c1e912-7ff3-4925-82dc-77bd7927676d';
+
+    $payload = [
+        'OrderId' => $orderId,
+        'AccountId' => 'c6aad9e8-4fe6-4895b82-cc1ea66b4aad',
+        'AccountDetails' => [
+            'MerchantId' => 20115,
+            'CreatedDate' => '2022-07-18T10:18:31.67087+00:00',
+            'FirstName' => 'Jane',
+            'LastName' => 'Doe',
+            'Email' => 'jane@doe.com',
+            'Currency' => 'GBP',
+            'Country' => 'GB',
+            'Dob' => null,
+            'City' => null,
+            'ZipCode' => null,
+            'Region' => null,
+            'Street' => null,
+            'Phone' => null,
+        ],
+        'TransactionType' => 'PayIn',
+        'TransactionStatus' => 'Success',
+        'InitialAmount' => 50.00,
+        'Currency' => 'EUR',
+        'TransactionId' => 179412,
+        'ExternalTransactionId' => '63793736354518895201',
+        'PaymentProcessor' => 'World Pay',
+        'DeclineReasonText' => null,
+        'CardType' => 'Visa',
+        'LastCcDigits' => '1234',
+        'IssueDate' => '2023-03-13T14:12:33.2372322+00:00',
+        'InternalPspId' => '5456650000021055203',
+        'MaskedPan' => '455636******1234',
+        'Signature' => hash('sha256', "test_secret_key:{$orderId}"),
+    ];
+
+    $response = $this->postJson('/api/webhooks/paytiko', $payload);
+
+    $response->assertOk()
+        ->assertJson(['status' => 'success']);
+
+    Event::assertDispatched(PaytikoWebhookReceived::class);
+    Event::assertDispatched(PaytikoPaymentSuccessful::class);
+});
+
 it('rejects webhook with invalid signature', function () {
     config(['cashier-paytiko.webhook.verify_signature' => true]);
     

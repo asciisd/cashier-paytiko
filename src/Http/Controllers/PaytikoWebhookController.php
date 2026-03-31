@@ -97,7 +97,7 @@ class PaytikoWebhookController extends Controller
             email: $payload['AccountDetails']['Email'],
             currency: $payload['AccountDetails']['Currency'],
             country: $payload['AccountDetails']['Country'],
-            dob: $payload['AccountDetails']['Dob'],
+            dob: $payload['AccountDetails']['Dob'] ?? null,
             city: $payload['AccountDetails']['City'] ?? null,
             zipCode: $payload['AccountDetails']['ZipCode'] ?? null,
             region: $payload['AccountDetails']['Region'] ?? null,
